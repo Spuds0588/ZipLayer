@@ -141,6 +141,10 @@ npm run dev        # start the local preview server (http://localhost:4173)
 npm run build      # build static site into dist/
 ```
 
+## Credits
+
+ZipLayer's archive engine is **[fflate](https://github.com/101arrowz/fflate)** (MIT) by [Arjun Barrett](https://github.com/101arrowz) — a tiny, high-performance, dependency-free zip/gzip library that does all the heavy lifting. A vendored copy ships in [`lib/fflate.mjs`](lib/fflate.mjs), so ZipLayer stays 100% offline and dependency-free at runtime.
+
 ## License
 
 [MIT](LICENSE) © 2026 ZipLayer.
