@@ -1,6 +1,6 @@
 # 📦 ZipLayer
 
-**A better zip download experience — 1 line of code.**
+**A better zip download experience — 1 line of code.** *(v2)*
 
 > 🌐 **Live demo / home page:** https://spuds0588.github.io/ZipLayer/ — try the wizard with a simulated loan file.
 
@@ -12,7 +12,7 @@ Instead of forcing users to download one massive monolithic ZIP, ZipLayer launch
 - 📁 **Direct-to-folder extraction** — unpack straight into an OS folder (Chromium desktop)
 - 🔗 **Fallback download** — the entire zip as a plain download (legacy browsers)
 
-Everything runs **100% client-side** in the browser. No backend, no API keys, no servers.
+URL sources are **streamed through a Web Worker straight into the browser's Origin Private File System (OPFS)** — flat RAM even on 1 GB+ archives, with download progress. Everything runs **100% client-side**. No backend, no API keys, no servers.
 
 ---
 
@@ -22,6 +22,7 @@ Everything runs **100% client-side** in the browser. No backend, no API keys, no
 |---|---|
 | ⚡ **Zero Setup** | No build step, no worker files to eject, no backend. Drop it in and it works. |
 | 🔍 **X-Ray Preview** | Stream the archive and inspect the directory tree before downloading anything. |
+| 🧵 **Worker + OPFS Streaming** | URL sources decompress in a Web Worker and write straight to the browser's OPFS — flat RAM on huge archives. |
 | ⬇️ **Selective Download** | Let users tick the files they actually need instead of grabbing one giant zip. |
 | 📁 **Direct-to-Folder** | Native OS extraction via the File System Access API — no unzip utility needed. |
 | 🛡️ **Graceful Fallback** | Device-aware tiers: direct extraction → OPFS preview → plain download fallback. |
@@ -63,7 +64,9 @@ if (caps.mustFallback) {
   window.location.href = "https://portal.com/api/export.zip";
 } else {
   // 2. X-Ray: stream + inspect contents
-  const archive = await ZipLayer.xray("https://portal.com/api/export.zip");
+  const archive = await ZipLayer.xray("https://portal.com/api/export.zip", {
+    onProgress: (pct) => console.log(`Streaming: ${pct}%`), // optional
+  });
   const tree = archive.getFileTree(); // [{ path, name, dir, size, compressedSize }]
 
   // 3. Selectively extract one file
@@ -76,12 +79,12 @@ if (caps.mustFallback) {
     });
   }
 
-  // 5. GLBA-friendly cleanup when done
+  // 5. GLBA-friendly cleanup when done (wipes OPFS session storage)
   archive.destroy();
 }
 ```
 
-`ZipLayer.xray()` accepts a URL string, `ArrayBuffer`, `TypedArray`, or a `File`/`Blob`.
+`ZipLayer.xray()` accepts a URL string, `ArrayBuffer`, `TypedArray`, or a `File`/`Blob`. **URL strings stream** — the fetch pipe hands compressed chunks to a module Worker (`src/zip-worker.js`) that decompresses with fflate and writes each file straight into OPFS, one chunk in flight at a time (backpressured, flat RAM). On devices without OPFS or Workers, or for raw bytes/File/Blob input, it falls back to in-memory parsing automatically. `ZipLayer.canStream()` reports whether streaming is available on the current device.
 
 ---
 
@@ -116,7 +119,7 @@ The site and library are fully static and root-relative, so they work from any h
 | **Tier 2** | Modern Safari / Firefox / mobile | OPFS enabled — X-Ray preview + selective file download |
 | **Tier 3** | Legacy | Graceful fallback to a plain `.zip` download |
 
-`getDeviceCapabilities()` evaluates `navigator.storage.getDirectory` (OPFS) and `window.showDirectoryPicker` (File System Access) to pick the right tier automatically.
+`getDeviceCapabilities()` evaluates `navigator.storage.getDirectory` (OPFS), `Worker` support, and `window.showDirectoryPicker` (File System Access) to pick the right tier automatically. Phase 2 streaming (Worker + OPFS) requires a secure context — GitHub Pages, jsDelivr, and localhost all qualify; `xray()` degrades gracefully to in-memory parsing otherwise.
 
 ---
 

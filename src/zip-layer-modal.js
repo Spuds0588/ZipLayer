@@ -48,7 +48,6 @@ main { padding:14px; overflow:auto; display:flex; flex-direction:column; min-hei
   overflow:auto; max-height:min(44vh, 340px); }
 .tree li { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--zl-border); }
 .tree li:last-child { border-bottom:none; }
-.tree li .ic { flex:none; }
 .tree li .nm { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; word-break:break-word; }
 .tree .dir .nm { color:#79c0ff; }
 .tree .sz { flex:none; color:var(--zl-muted); font-size:12px; }
@@ -218,7 +217,7 @@ export class ZipLayerModal extends HTMLElement {
     this._qs("#step").textContent = "Streaming…";
     this._show("state-streaming");
     this._progress(0);
-    if (!this._bytes) this._stream();
+    if (!this._archive) this._stream();
     else this._showContents();
   }
 
@@ -242,6 +241,17 @@ export class ZipLayerModal extends HTMLElement {
 
   async _stream() {
     try {
+      if (this.src && ZipLayer.canStream()) {
+        // Phase 2: stream URL → worker → OPFS (flat RAM, backpressured)
+        this._archive = await ZipLayer.xray(this.src, {
+          onProgress: (pct) => this._progress(pct),
+        });
+        this._bytes = null;
+        await new Promise((r) => setTimeout(r, 350)); // let 100% register
+        this._showContents();
+        return;
+      }
+      // Tier 3 fallback: download into memory, then parse
       const res = await fetch(this.src);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const total = Number(res.headers.get("content-length")) || 0;
@@ -281,16 +291,12 @@ export class ZipLayerModal extends HTMLElement {
     for (const e of tree) {
       const li = document.createElement("li");
       li.className = e.dir ? "dir" : "";
-      const ic = document.createElement("span");
-      ic.className = "ic";
-      ic.textContent = e.dir ? "📁" : "📄";
       const nm = document.createElement("span");
       nm.className = "nm";
       nm.textContent = e.path;
       const sz = document.createElement("span");
       sz.className = "sz";
       sz.textContent = e.dir ? "—" : fmt(e.size);
-      li.appendChild(ic);
       li.appendChild(nm);
       li.appendChild(sz);
       if (!e.dir) {
@@ -320,7 +326,7 @@ export class ZipLayerModal extends HTMLElement {
       ul.appendChild(li);
     }
     this._qs("#foot-status").textContent =
-      tree.filter((e) => !e.dir).length + " files · " + fmt(this._bytes.length) + " downloaded";
+      tree.filter((e) => !e.dir).length + " files · " + fmt(this._archive.size || 0) + " streamed";
   }
 
   async _preview(path) {
@@ -380,14 +386,22 @@ export class ZipLayerModal extends HTMLElement {
   }
 
   _downloadFull() {
-    if (!this._bytes) return;
-    const blob = new Blob([this._bytes], { type: "application/zip" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = this.title;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (this._bytes) {
+      // in-memory mode: blob from held bytes
+      const blob = new Blob([this._bytes], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = this.title;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } else if (this.src) {
+      // streaming mode: let the browser stream the download natively (no JS buffering)
+      const a = document.createElement("a");
+      a.href = this.src;
+      a.download = this.title;
+      a.click();
+    }
     this._qs("#foot-status").textContent = `Downloaded ${this.title}`;
   }
 

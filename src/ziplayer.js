@@ -1,11 +1,14 @@
 /**
- * ZipLayer.js — zero-config, client-side archive SDK (v0).
+ * ZipLayer.js — zero-config, client-side archive SDK (v2).
  *
  * Engine: fflate (MIT) vendored at ../lib/fflate.mjs — no build step, no
  * runtime fetches, 100% local in the browser.
  *
- * v0 scope (YAGNI): in-memory X-Ray + extraction. Streaming-to-OPFS and the
- * inline Web Worker from the PRD are Phase 2.
+ * v1: in-memory X-Ray + extraction (bytes/File/Blob).
+ * v2: URL sources stream through a module Web Worker into the Origin Private
+ * File System (OPFS) — flat RAM on 1 GB+ archives, backpressured handshake
+ * (init→ready, chunk→chunkDone, end→done). Non-OPFS browsers fall back to
+ * the v1 in-memory path.
  */
 import { Unzip, unzipSync } from "../lib/fflate.mjs";
 
@@ -64,31 +67,116 @@ function scanTree(bytes) {
   return entries;
 }
 
+// Phase 2 capability: streaming into OPFS needs OPFS + module Worker.
+function canStream() {
+  return typeof navigator !== "undefined" &&
+    typeof Worker !== "undefined" &&
+    !!navigator.storage?.getDirectory;
+}
+
+// PRD 2.2 — stream a URL through the worker into OPFS with backpressure.
+// One compressed chunk in flight at a time (main waits for chunkDone), so RAM
+// stays flat regardless of archive size. Every step is handshaked (init→ready,
+// chunk→chunkDone, end→done) so the loop can never deadlock, and errors or a
+// timeout reject the pending ack so callers fall back instead of hanging.
+async function streamArchive(url, { onProgress } = {}) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch failed: HTTP ${res.status}`);
+  const total = Number(res.headers.get("content-length")) || 0;
+  const session = `zl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+  const worker = new Worker(new URL("./zip-worker.js", import.meta.url), { type: "module" });
+  const archive = new OPFSArchive(worker, session, total);
+
+  let ack = null; // the single pending handshake resolver
+  let err = null;
+  const settle = () => { const a = ack; ack = null; a && a(); };
+  worker.onmessage = (e) => {
+    const m = e.data;
+    if (m.type === "file") archive._tree.push(m);
+    else if (m.type === "error") { err = new Error(m.message); settle(); }
+    else if (m.type === "ready" || m.type === "chunkDone" || m.type === "done") settle();
+  };
+  worker.onerror = (e) => { err = e.error || new Error("worker error"); settle(); };
+
+  // Wait for the next handshake ack. One in flight at a time; a timeout guards
+  // against any silent worker failure so we degrade instead of hanging at 0%.
+  const awaitAck = (timeoutMs = 20000) => new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      if (ack) { ack = null; reject(new Error("streaming timed out")); }
+    }, timeoutMs);
+    ack = () => { clearTimeout(t); err ? reject(err) : resolve(); };
+  });
+
+  try {
+    worker.postMessage({ type: "init", session });
+    await awaitAck(); // "ready" (or error/timeout) — OPFS is set up before any chunk
+
+    const reader = res.body.getReader();
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      got += value.length;
+      // transfer an exact-size buffer so no copy is made in the worker
+      const buf = value.byteLength === value.buffer.byteLength ? value.buffer : value.slice().buffer;
+      worker.postMessage({ type: "chunk", buf }, [buf]);
+      await awaitAck(); // "chunkDone" (backpressure: next chunk only after this is consumed)
+      if (total) onProgress?.(Math.min(99, Math.round((got / total) * 100)));
+    }
+    worker.postMessage({ type: "end" });
+    await awaitAck(); // "done" — all files flushed to OPFS
+    onProgress?.(100);
+    archive.size = got; // real streamed bytes (content-length may be absent/0)
+    archive._done = true;
+    return archive;
+  } catch (e) {
+    await archive.destroy(); // terminate worker + wipe partial OPFS session
+    throw e;
+  }
+}
+
 export class ZipLayer {
   /** PRD 1.3.2 — hardware/browser capability tiers. */
   static getDeviceCapabilities() {
     const browser = typeof navigator !== "undefined" && typeof window !== "undefined";
     const opfs = browser && !!navigator.storage?.getDirectory;
+    const worker = browser && typeof Worker !== "undefined";
     const fsa = browser && typeof window.showDirectoryPicker === "function";
-    return { canPreview: opfs, canExtractLocal: opfs && fsa, mustFallback: !opfs };
+    return { canPreview: opfs && worker, canExtractLocal: opfs && worker && fsa, mustFallback: !(opfs && worker) };
   }
 
-  /** PRD 2.2 — X-Ray an archive. Accepts a URL string or raw bytes/File/Blob. */
-  static async xray(source) {
+  /** Phase 2 — can URL sources stream into OPFS on this device? */
+  static canStream() {
+    return canStream();
+  }
+
+  /** PRD 2.2 — X-Ray an archive. URL strings stream (OPFS+worker); raw bytes/File/Blob parse in memory. */
+  static async xray(source, opts = {}) {
+    if (typeof source === "string" && canStream()) {
+      try {
+        return await streamArchive(source, opts);
+      } catch (err) {
+        // Graceful degradation (PRD 1.3.2): fall back to in-memory parsing.
+        console.warn("[ziplayer] streaming failed, falling back to in-memory:", err.message);
+      }
+    }
     return new Archive(await toBytes(source));
   }
 
   /** PRD 3.1 — stream an archive straight into a user-chosen OS folder. */
   static async extractToLocalFolder(source, opts = {}) {
-    return (await ZipLayer.xray(source)).extractToLocalFolder(opts);
+    return (await ZipLayer.xray(source, opts)).extractToLocalFolder(opts);
   }
 }
 
+/** In-memory archive (bytes / File / Blob / legacy browsers). */
 class Archive {
   constructor(bytes) {
     this._bytes = bytes;
     this._tree = null;
   }
+
+  get size() { return this._bytes?.length ?? 0; }
 
   /** PRD 2.3 — sanitized array of {path, name, dir, size, compressedSize}. */
   getFileTree() {
@@ -129,5 +217,71 @@ class Archive {
       onProgress?.(Math.round(((i + 1) / files.length) * 100));
     }
     return { count: files.length };
+  }
+}
+
+/** Phase 2 — archive whose files live in OPFS, written by the streaming worker. */
+class OPFSArchive {
+  constructor(worker, session, size) {
+    this._worker = worker;
+    this._session = session;
+    this.size = size; // compressed bytes streamed
+    this._tree = [];
+    this._done = false;
+  }
+
+  /** PRD 2.3 — tree assembled from worker "file" messages (no RAM footprint). */
+  getFileTree() { return this._tree; }
+
+  async _sessionDir() {
+    const root = await navigator.storage.getDirectory();
+    const sessions = await root.getDirectoryHandle("ziplayer-sessions", { create: true });
+    return sessions.getDirectoryHandle(this._session);
+  }
+
+  /** PRD 2.4 — pull one file out of OPFS as a native HTML5 File (with MIME type). */
+  async extractFile(path) {
+    const parts = path.split("/");
+    const name = parts.pop();
+    let dir = await this._sessionDir();
+    for (const p of parts) dir = await dir.getDirectoryHandle(p);
+    const handle = await dir.getFileHandle(name);
+    const f = await handle.getFile();
+    return new File([f], name, { type: mimeOf(path), lastModified: f.lastModified });
+  }
+
+  /** PRD 3.1 — copy every OPFS file into a folder the user picks via showDirectoryPicker. */
+  async extractToLocalFolder({ onProgress } = {}) {
+    if (typeof window === "undefined" || typeof window.showDirectoryPicker !== "function") {
+      throw new Error("showDirectoryPicker() unsupported — Tier 3 fallback applies");
+    }
+    const root = await window.showDirectoryPicker({ mode: "readwrite" });
+    const files = this.getFileTree().filter((e) => !e.dir);
+    for (let i = 0; i < files.length; i++) {
+      const e = files[i];
+      const file = await this.extractFile(e.path);
+      const parts = e.path.split("/");
+      const name = parts.pop();
+      let dir = root;
+      for (const p of parts) dir = await dir.getDirectoryHandle(p, { create: true });
+      const handle = await dir.getFileHandle(name, { create: true });
+      const w = await handle.createWritable();
+      await w.write(file);
+      await w.close();
+      onProgress?.(Math.round(((i + 1) / files.length) * 100));
+    }
+    return { count: files.length };
+  }
+
+  /** PRD 2.5 — terminate the worker and wipe this session's OPFS storage. */
+  async destroy() {
+    this._worker?.terminate();
+    this._worker = null;
+    this._tree = [];
+    try {
+      const root = await navigator.storage.getDirectory();
+      const sessions = await root.getDirectoryHandle("ziplayer-sessions");
+      await sessions.removeEntry(this._session, { recursive: true });
+    } catch { /* session already gone */ }
   }
 }
