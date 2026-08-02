@@ -193,6 +193,38 @@
         .box h3 { color: var(--white); font-size: 1.25rem; margin: 0 0 0.6rem; }
         .box p { color: var(--text-main); opacity: 0.85; margin: 0; font-size: 0.98rem; }
 
+        /* --- AI Agents Strip --- */
+        .ai-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            background: rgba(255, 79, 163, 0.06);
+            border: 1px solid var(--pink-line);
+            border-radius: 18px;
+            padding: 1.5rem 1.8rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .ai-strip strong { color: var(--white); font-size: 1.05rem; display: block; margin-bottom: 0.25rem; }
+        .ai-strip p { color: var(--text-dim); margin: 0; font-size: 0.95rem; }
+        .ai-strip code { color: var(--pink); font-family: var(--mono); font-size: 0.9em; background: rgba(255,79,163,0.08); padding: 0.1em 0.35em; border-radius: 4px; }
+        .ai-strip-link {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            background: var(--pink);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.95rem;
+            padding: 0.75rem 1.4rem;
+            border-radius: 100px;
+            text-decoration: none;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .ai-strip-link:hover { background: var(--pink-deep); transform: translateY(-2px); }
+
         /* --- Usage Example --- */
         .usage-title { text-align: center; color: var(--white); font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 2rem; }
         .usage-box {
@@ -250,6 +282,8 @@
             .floating-svg { width: 40px; height: 40px; }
             .usage-title { font-size: 1.7rem; }
             .usage-box { padding: 1rem; }
+            .ai-strip { flex-direction: column; align-items: stretch; text-align: center; padding: 1.3rem 1.2rem; }
+            .ai-strip-link { justify-content: center; }
             .usage-box pre { font-size: 0.78rem; }
             footer .links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem 1.4rem; }
             footer .links a { margin: 0; }
@@ -329,6 +363,18 @@
                     <h3>Open Source</h3>
                     <p>Built with transparency and privacy in mind. Fully open source (MIT) and free to use in personal and commercial projects.</p>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" style="padding-top: 0;">
+        <div class="container">
+            <div class="ai-strip">
+                <div>
+                    <strong>🤖 Building with an AI coding agent?</strong>
+                    <p>Point your vibe coder at <code>AGENTS.md</code> — a knowledge file that teaches any coding agent how to use ZipLayer: install, API reference, and browser support.</p>
+                </div>
+                <a class="ai-strip-link" href="https://github.com/Spuds0588/ZipLayer/blob/main/AGENTS.md" target="_blank" rel="noopener">Read AGENTS.md →</a>
             </div>
         </div>
     </section>

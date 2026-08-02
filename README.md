@@ -1,6 +1,6 @@
 # 📦 ZipLayer
 
-**A better zip download experience — 1 line of code.** *(v2)*
+**A better zip download experience — 1 line of code.** *(v3)*
 
 > 🌐 **Live demo / home page:** https://spuds0588.github.io/ZipLayer/ — try the wizard with a simulated loan file.
 
@@ -24,7 +24,7 @@ URL sources are **streamed through a Web Worker straight into the browser's Orig
 | 🔍 **X-Ray Preview** | Stream the archive and inspect the directory tree before downloading anything. |
 | 🧵 **Worker + OPFS Streaming** | URL sources decompress in a Web Worker and write straight to the browser's OPFS — flat RAM on huge archives. |
 | ⬇️ **Selective Download** | Let users tick the files they actually need instead of grabbing one giant zip. |
-| 📁 **Direct-to-Folder** | Native OS extraction via the File System Access API — no unzip utility needed. |
+| 📁 **Direct-to-OS Streaming** | Extract straight into an OS folder via File System Access — the worker streams files directly to disk, no OPFS round-trip. |
 | 🛡️ **Graceful Fallback** | Device-aware tiers: direct extraction → OPFS preview → plain download fallback. |
 | 🔓 **Open Source** | MIT licensed. Fully transparent, privacy-first, free for personal and commercial use. |
 
@@ -135,6 +135,10 @@ The site and library are fully static and root-relative, so they work from any h
 - ✉️ [**MailLayer Embedded**](https://github.com/Spuds0588/MailLayer-Embedded) — drop-in email script for the web
 
 ---
+
+## 🤖 For AI Coding Agents
+
+Building with ZipLayer using a vibe coder, Cursor, Copilot, Claude Code, or any other AI coding agent? This repo ships **[`AGENTS.md`](AGENTS.md)**, a knowledge file that teaches coding agents how to **use** ZipLayer: quick-start integration for the drop-in modal and headless SDK, the full API reference, browser-support tiers, and integration gotchas. Many agents read `AGENTS.md` automatically — point yours at it and it can wire ZipLayer into your app without guessing. **Point your agent at it and go.**
 
 ## Development
 

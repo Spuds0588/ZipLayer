@@ -1,6 +1,6 @@
 {
   "name": "ziplayer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ZipLayer.js — a better zip download experience in 1 line of code. Zero-config, client-side archive SDK + <zip-layer-modal> web component.",
   "type": "module",
   "main": "./src/ziplayer.js",

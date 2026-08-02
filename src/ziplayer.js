@@ -1,5 +1,5 @@
 /**
- * ZipLayer.js — zero-config, client-side archive SDK (v2).
+ * ZipLayer.js — zero-config, client-side archive SDK (v3).
  *
  * Engine: fflate (MIT) vendored at ../lib/fflate.mjs — no build step, no
  * runtime fetches, 100% local in the browser.
@@ -9,6 +9,9 @@
  * File System (OPFS) — flat RAM on 1 GB+ archives, backpressured handshake
  * (init→ready, chunk→chunkDone, end→done). Non-OPFS browsers fall back to
  * the v1 in-memory path.
+ * v3: extractToLocalFolder() streams URL sources straight into a user-picked
+ * OS folder — the worker holds the FileSystemDirectoryHandle (structured-
+ * cloneable) and writes files directly to disk, skipping the OPFS round-trip.
  */
 import { Unzip, unzipSync } from "../lib/fflate.mjs";
 
@@ -74,25 +77,22 @@ function canStream() {
     !!navigator.storage?.getDirectory;
 }
 
-// PRD 2.2 — stream a URL through the worker into OPFS with backpressure.
-// One compressed chunk in flight at a time (main waits for chunkDone), so RAM
-// stays flat regardless of archive size. Every step is handshaked (init→ready,
-// chunk→chunkDone, end→done) so the loop can never deadlock, and errors or a
-// timeout reject the pending ack so callers fall back instead of hanging.
-async function streamArchive(url, { onProgress } = {}) {
+// Shared streaming core (v2 X-Ray + v3 extract): fetch a URL and feed the
+// worker one transferred chunk at a time, waiting for the handshake ack after
+// each (backpressure → flat RAM). The worker must already be set up (init or
+// extractStart sent); it answers "ready" before the first chunk. Errors or a
+// timeout reject the pending ack so callers degrade instead of hanging.
+async function streamFetchToWorker(url, worker, { onProgress, onMsg } = {}) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`fetch failed: HTTP ${res.status}`);
   const total = Number(res.headers.get("content-length")) || 0;
-  const session = `zl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-  const worker = new Worker(new URL("./zip-worker.js", import.meta.url), { type: "module" });
-  const archive = new OPFSArchive(worker, session, total);
 
   let ack = null; // the single pending handshake resolver
   let err = null;
   const settle = () => { const a = ack; ack = null; a && a(); };
   worker.onmessage = (e) => {
     const m = e.data;
-    if (m.type === "file") archive._tree.push(m);
+    if (m.type === "file") onMsg?.(m);
     else if (m.type === "error") { err = new Error(m.message); settle(); }
     else if (m.type === "ready" || m.type === "chunkDone" || m.type === "done") settle();
   };
@@ -107,25 +107,35 @@ async function streamArchive(url, { onProgress } = {}) {
     ack = () => { clearTimeout(t); err ? reject(err) : resolve(); };
   });
 
+  const reader = res.body.getReader();
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    got += value.length;
+    // transfer an exact-size buffer so no copy is made in the worker
+    const buf = value.byteLength === value.buffer.byteLength ? value.buffer : value.slice().buffer;
+    worker.postMessage({ type: "chunk", buf }, [buf]);
+    await awaitAck(); // "chunkDone" (backpressure: next chunk only after this is consumed)
+    if (total) onProgress?.(Math.min(99, Math.round((got / total) * 100)));
+  }
+  worker.postMessage({ type: "end" });
+  await awaitAck(); // "done" — all files flushed
+  onProgress?.(100);
+  return { got, total };
+}
+
+// PRD 2.2 — stream a URL through the worker into OPFS (X-Ray) with backpressure.
+async function streamArchive(url, { onProgress } = {}) {
+  const session = `zl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+  const worker = new Worker(new URL("./zip-worker.js", import.meta.url), { type: "module" });
+  const archive = new OPFSArchive(worker, session, url);
   try {
     worker.postMessage({ type: "init", session });
-    await awaitAck(); // "ready" (or error/timeout) — OPFS is set up before any chunk
-
-    const reader = res.body.getReader();
-    let got = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      got += value.length;
-      // transfer an exact-size buffer so no copy is made in the worker
-      const buf = value.byteLength === value.buffer.byteLength ? value.buffer : value.slice().buffer;
-      worker.postMessage({ type: "chunk", buf }, [buf]);
-      await awaitAck(); // "chunkDone" (backpressure: next chunk only after this is consumed)
-      if (total) onProgress?.(Math.min(99, Math.round((got / total) * 100)));
-    }
-    worker.postMessage({ type: "end" });
-    await awaitAck(); // "done" — all files flushed to OPFS
-    onProgress?.(100);
+    const { got } = await streamFetchToWorker(url, worker, {
+      onProgress,
+      onMsg: (m) => archive._tree.push(m), // X-Ray tree from worker "file" messages
+    });
     archive.size = got; // real streamed bytes (content-length may be absent/0)
     archive._done = true;
     return archive;
@@ -220,12 +230,13 @@ class Archive {
   }
 }
 
-/** Phase 2 — archive whose files live in OPFS, written by the streaming worker. */
+/** Phase 2/3 — archive whose files live in OPFS (X-Ray) or stream to an OS folder. */
 class OPFSArchive {
-  constructor(worker, session, size) {
+  constructor(worker, session, url) {
     this._worker = worker;
     this._session = session;
-    this.size = size; // compressed bytes streamed
+    this._url = url; // source URL, re-streamed for direct-to-OS extraction
+    this.size = 0;   // compressed bytes streamed (set after the X-Ray pass)
     this._tree = [];
     this._done = false;
   }
@@ -250,27 +261,20 @@ class OPFSArchive {
     return new File([f], name, { type: mimeOf(path), lastModified: f.lastModified });
   }
 
-  /** PRD 3.1 — copy every OPFS file into a folder the user picks via showDirectoryPicker. */
+  /** PRD 3.1 / v3 — stream the archive straight into a user-picked OS folder.
+   * The worker holds the FileSystemDirectoryHandle (structured-cloneable) and
+   * writes every file directly to disk — no OPFS round-trip, flat RAM even on
+   * GB-sized archives. The URL source is re-streamed through the same
+   * backpressured handshake as the X-Ray pass. */
   async extractToLocalFolder({ onProgress } = {}) {
     if (typeof window === "undefined" || typeof window.showDirectoryPicker !== "function") {
       throw new Error("showDirectoryPicker() unsupported — Tier 3 fallback applies");
     }
+    if (!this._url) throw new Error("URL source required for direct-to-OS streaming");
     const root = await window.showDirectoryPicker({ mode: "readwrite" });
-    const files = this.getFileTree().filter((e) => !e.dir);
-    for (let i = 0; i < files.length; i++) {
-      const e = files[i];
-      const file = await this.extractFile(e.path);
-      const parts = e.path.split("/");
-      const name = parts.pop();
-      let dir = root;
-      for (const p of parts) dir = await dir.getDirectoryHandle(p, { create: true });
-      const handle = await dir.getFileHandle(name, { create: true });
-      const w = await handle.createWritable();
-      await w.write(file);
-      await w.close();
-      onProgress?.(Math.round(((i + 1) / files.length) * 100));
-    }
-    return { count: files.length };
+    this._worker.postMessage({ type: "extractStart", root }); // handle clones into the worker
+    await streamFetchToWorker(this._url, this._worker, { onProgress });
+    return { count: this._tree.filter((e) => !e.dir).length };
   }
 
   /** PRD 2.5 — terminate the worker and wipe this session's OPFS storage. */
