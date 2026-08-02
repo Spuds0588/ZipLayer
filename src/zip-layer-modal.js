@@ -83,6 +83,9 @@ main { padding:14px; overflow:auto; display:flex; flex-direction:column; min-hei
 .viewer .pv-none { color:var(--zl-muted); text-align:center; padding:20px; }
 footer { display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:10px 14px;
   border-top:1px solid var(--zl-border); color:var(--zl-muted); font-size:11.5px; }
+footer .powered { margin-left:auto; display:inline-flex; align-items:center; gap:4px;
+  color:var(--zl-muted); text-decoration:none; }
+footer .powered:hover { color:var(--zl-accent); }
 @media (max-width: 560px) {
   .overlay { padding:8px; }
   .modal { max-height:calc(100dvh - 16px); }
@@ -200,6 +203,7 @@ export class ZipLayerModal extends HTMLElement {
     </main>
     <footer>
       <span id="foot-status"></span>
+      <a class="powered" href="https://spuds0588.github.io/ZipLayer/" target="_blank" rel="noopener">⚡ Powered by ZipLayer</a>
     </footer>
   </div>
 </div>`;
