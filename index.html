@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZipLayer — A Better Zip Download Experience in 1 Line of Code</title>
+    <meta name="description" content="Upgrade your website's download experience. Stream zip archives into the browser, inspect contents, and let users grab exactly what they need — no unzip utility required.">
+    <style>
+        :root {
+            --pink: #ff4fa3;
+            --pink-deep: #e0287e;
+            --pink-soft: rgba(255, 79, 163, 0.14);
+            --pink-line: rgba(255, 79, 163, 0.35);
+            --ink: #0a0a0f;
+            --ink-2: #12121a;
+            --white: #ffffff;
+            --text-main: #f3f4f6;
+            --text-dim: #9ca3af;
+            --mono: 'Fira Code', 'Courier New', ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; background-color: var(--ink); }
+        body {
+            background-color: transparent;
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            line-height: 1.6;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* --- Background Animation: Floating Zip Folders --- */
+        #bg-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -1;
+            overflow: hidden;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(10,10,15,0.8) 100%);
+        }
+        .bg-gradient-overlay {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(255, 79, 163, 0.10) 0%, transparent 50%),
+                radial-gradient(ellipse at 100% 100%, rgba(224, 40, 126, 0.10) 0%, transparent 50%);
+        }
+        .bg-wrap { perspective: 1000px; perspective-origin: 50% 50%; position: absolute; inset: 0; overflow: hidden; }
+        .floating-svg {
+            position: absolute;
+            bottom: -200px;
+            transform-style: preserve-3d;
+            transition: opacity 1s;
+            opacity: 0.3;
+        }
+        @keyframes float-up {
+            from { bottom: -200px; transform: translateX(0) rotate(0deg); }
+            to   { bottom: 120vh;  transform: translateX(var(--drift)) rotate(var(--rotation)); }
+        }
+
+        /* --- Layout & Sections --- */
+        .section { padding: 8rem 2rem; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 1.25rem; }
+        .nav {
+            position: absolute;
+            top: 2.5rem;
+            left: 2.5rem;
+            z-index: 100;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #9ca3af;
+            text-decoration: none;
+            font-size: 0.95rem;
+        }
+        .nav:hover { color: #fff; }
+
+        .hero { min-height: 92vh; display: flex; align-items: center; }
+        .hero .tag {
+            display: inline-block;
+            background: var(--pink-soft);
+            color: var(--pink);
+            border: 1px solid var(--pink-line);
+            border-radius: 999px;
+            padding: 0.4rem 1.1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            margin-bottom: 1.6rem;
+        }
+        .hero .title {
+            color: var(--white);
+            font-weight: 900;
+            font-size: 4.5rem;
+            letter-spacing: -0.04em;
+            line-height: 1;
+            margin: 0;
+        }
+        .hero .title .accent { color: var(--pink); }
+        .hero .subtitle {
+            color: var(--text-dim);
+            font-size: 1.5rem;
+            max-width: 800px;
+            margin: 1.5rem auto 2.5rem;
+        }
+        .hero code { color: var(--pink); background: rgba(255,79,163,0.08); padding: 0.1em 0.35em; border-radius: 4px; font-family: var(--mono); }
+
+        /* --- Code Box --- */
+        .code-box {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 1.5rem;
+            font-family: var(--mono);
+            font-size: 1.05rem;
+            color: #ffb3d1;
+            position: relative;
+            max-width: 700px;
+            margin: 0 auto;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+        .code-box code { display: block; overflow-x: auto; white-space: nowrap; }
+        .code-box::before {
+            content: "your-page.html";
+            position: absolute;
+            top: -12px; left: 20px;
+            background: var(--pink);
+            color: #fff;
+            font-size: 0.75rem;
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-family: 'Inter', sans-serif;
+            font-weight: bold;
+        }
+        .copy-btn {
+            position: absolute;
+            right: 15px; top: 15px;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: var(--text-dim);
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font: inherit;
+        }
+        .copy-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+
+        /* --- Buttons --- */
+        .buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-top: 2.5rem; }
+        .button {
+            display: inline-flex; align-items: center; justify-content: center;
+            font-weight: 700;
+            font-size: 1rem;
+            line-height: 1.2;
+            gap: 0.5rem;
+            padding: 1.1rem 2.2rem;
+            flex: 1 1 0;
+            min-width: 240px;
+            max-width: 340px;
+            border-radius: 100px;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+            font-family: inherit;
+        }
+        .button.is-primary {
+            background: var(--pink);
+            color: #fff;
+            box-shadow: 0 10px 20px rgba(255, 79, 163, 0.25);
+        }
+        .button.is-primary:hover { background: var(--pink-deep); transform: translateY(-2px); }
+        .button.is-dark { background: var(--ink-2); color: var(--text-main); border: 1px solid rgba(255,255,255,0.12); }
+        .button.is-dark:hover { background: #1d1d28; transform: translateY(-2px); }
+
+        /* --- Feature Cards --- */
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+        .box {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            padding: 3rem 2.2rem;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+        .box:hover { transform: translateY(-8px); border-color: var(--pink-line); }
+        .feature-icon { font-size: 2.4rem; margin-bottom: 1.2rem; display: block; }
+        .box h3 { color: var(--white); font-size: 1.25rem; margin: 0 0 0.6rem; }
+        .box p { color: var(--text-main); opacity: 0.85; margin: 0; font-size: 0.98rem; }
+
+        /* --- Usage Example --- */
+        .usage-title { text-align: center; color: var(--white); font-size: 2.2rem; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 2rem; }
+        .usage-box {
+            background: #1a1a1a;
+            text-align: left;
+            max-width: 800px;
+            margin: 0 auto;
+            border: 1px solid #333;
+            border-radius: 16px;
+            padding: 1.5rem;
+        }
+        .usage-box pre { background: transparent; color: #fff; margin: 0; font-family: var(--mono); font-size: 0.95rem; line-height: 1.7; overflow-x: auto; }
+        .usage-box .c { color: #64748b; }
+        .usage-box .t { color: var(--pink); }
+        .usage-box .s { color: #ffb3d1; }
+
+        /* --- Footer --- */
+        footer {
+            background-color: #0a0a0a;
+            padding: 6rem 0 4rem;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-dim);
+            text-align: center;
+        }
+        footer a { color: var(--text-dim); text-decoration: none; }
+        footer a:hover { color: white; }
+        footer .links { margin: 1.5rem 0; }
+        footer .links a { margin: 0 0.9rem; }
+        footer .sister { font-size: 0.9rem; opacity: 0.85; }
+
+        @media (max-width: 400px) {
+            .hero .title { font-size: 1.85rem; }
+            .hero .subtitle { font-size: 1rem; }
+            .hero .tag { font-size: 0.72rem; }
+            .button { font-size: 0.95rem; }
+        }
+
+        @media (max-width: 768px) {
+            .nav { top: 1.25rem; left: 1.25rem; font-size: 0.85rem; }
+            .hero { min-height: auto; padding: 6.5rem 0 4rem; }
+            .hero .title { font-size: 2.1rem; }
+            .hero .subtitle { font-size: 1.1rem; margin: 1.25rem auto 2rem; }
+            .hero .buttons { margin-top: 1.75rem; }
+            footer { padding: 4rem 0 3rem; }
+            .hero .tag { font-size: 0.78rem; }
+            .section { padding: 4.5rem 0; }
+            .grid { grid-template-columns: 1fr; gap: 1rem; }
+            .box { padding: 2.2rem 1.6rem; }
+            .buttons { flex-direction: column; align-items: stretch; gap: 0.75rem; margin-top: 2rem; }
+            .button { min-width: 0; width: 100%; max-width: none; padding: 1rem 1.5rem; }
+            .code-box { font-size: 0.8rem; padding: 2.2rem 1rem 1.1rem; }
+            .code-box code { white-space: normal; overflow-wrap: anywhere; overflow-x: visible; }
+            .code-box::before { left: 12px; font-size: 0.68rem; }
+            .copy-btn { top: 8px; right: 8px; padding: 3px 8px; }
+            .floating-svg { width: 40px; height: 40px; }
+            .usage-title { font-size: 1.7rem; }
+            .usage-box { padding: 1rem; }
+            .usage-box pre { font-size: 0.78rem; }
+            footer .links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem 1.4rem; }
+            footer .links a { margin: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="bg-canvas">
+        <div class="bg-gradient-overlay"></div>
+        <div class="bg-wrap" id="floating-container"></div>
+    </div>
+
+    <a class="nav" href="https://github.com/Spuds0588/ZipLayer" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            GitHub
+    </a>
+
+    <section class="hero">
+        <div class="container" style="text-align: center;">
+            <div class="tag">Open Source — Drop-in Archive SDK</div>
+            <h1 class="title">
+                A better zip download<br>experience. <span class="accent">1 line of code.</span>
+            </h1>
+            <h2 class="subtitle">
+                Upgrade your website's download experience. Intercept zip files and launch a
+                <code>ZipLayer</code> wizard that streams the archive into the browser, previews its contents,
+                and lets users grab exactly what they need — no unzip utility required.
+            </h2>
+
+            <div class="code-box">
+                <button class="copy-btn" onclick="copyCode()">Copy</button>
+                <code id="install-code">&lt;zip-layer-modal src="https://portal.com/api/export.zip"&gt;&lt;/zip-layer-modal&gt;</code>
+            </div>
+
+            <div class="buttons">
+                <button class="button is-primary" id="demo-btn">⬇ Download Example Zip</button>
+                <button type="button" class="button is-dark" id="docs-btn">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    Read the Docs
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="section">
+        <div class="container">
+            <div class="grid">
+                <div class="box">
+                    <span class="feature-icon">⚡</span>
+                    <h3>Zero Setup</h3>
+                    <p>No backend, no build step, no worker files to eject. Drop in the component and it works — all processing happens inside the browser.</p>
+                </div>
+                <div class="box">
+                    <span class="feature-icon">🔍</span>
+                    <h3>X-Ray Preview</h3>
+                    <p>Stream the archive into your browser and inspect the directory tree before downloading anything. See what you're getting, then decide.</p>
+                </div>
+                <div class="box">
+                    <span class="feature-icon">⬇️</span>
+                    <h3>Selective Download</h3>
+                    <p>Stop forcing users to download one massive zip. Let them tick the files they actually need and grab those instead.</p>
+                </div>
+                <div class="box">
+                    <span class="feature-icon">📁</span>
+                    <h3>Direct-to-Folder</h3>
+                    <p>On Chromium desktops, extract the full payload straight into an OS folder via the native File System Access API — no unzip utility needed.</p>
+                </div>
+                <div class="box">
+                    <span class="feature-icon">🛡️</span>
+                    <h3>Graceful Fallback</h3>
+                    <p>Device-aware tiers: direct extraction, OPFS preview, or a plain download fallback. Every visitor gets the best experience their browser allows.</p>
+                </div>
+                <div class="box">
+                    <span class="feature-icon">🔓</span>
+                    <h3>Open Source</h3>
+                    <p>Built with transparency and privacy in mind. Fully open source (MIT) and free to use in personal and commercial projects.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" style="padding-top: 0;">
+        <div class="container">
+            <h2 class="usage-title">Usage Example</h2>
+            <div class="usage-box">
+                <pre><code><span class="c">&lt;!-- Drop-in the ZipLayer wizard --&gt;</span>
+<span class="t">&lt;zip-layer-modal</span> <span class="s">src="https://portal.com/api/export.zip"</span><span class="t">&gt;&lt;/zip-layer-modal&gt;</span>
+
+<span class="c">&lt;!-- Or use the headless API --&gt;</span>
+<span class="t">&lt;script type="module"&gt;</span>
+<span class="t">  import</span> { ZipLayer } <span class="t">from</span> <span class="s">"ziplayer"</span><span class="t">;</span>
+  <span class="t">const</span> archive = <span class="t">await</span> ZipLayer.<span class="s">xray</span>(<span class="s">'https://portal.com/api/export.zip'</span>)<span class="t">;</span>
+  <span class="t">const</span> tree = archive.<span class="s">getFileTree</span>()<span class="t">;</span>
+  <span class="t">const</span> file = <span class="t">await</span> archive.<span class="s">extractFile</span>(tree[<span class="s">0</span>].path)<span class="t">;</span>
+<span class="t">&lt;/script&gt;</span></code></pre>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>📦 Built by <a href="https://github.com/Spuds0588" target="_blank" rel="noopener">Spuds0588</a></p>
+            <div class="links">
+                <a href="https://github.com/Spuds0588/ZipLayer" target="_blank" rel="noopener">GitHub</a>
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="README.md">README</a>
+            </div>
+            <p class="sister">Sister projects: <a href="https://github.com/Spuds0588/MailLayer" target="_blank" rel="noopener">MailLayer</a> · <a href="https://github.com/Spuds0588/MailLayer-Embedded" target="_blank" rel="noopener">MailLayer Embedded</a></p>
+            <p>© 2026 ZipLayer. MIT License.</p>
+        </div>
+    </footer>
+
+    <zip-layer-modal src="assets/JohnSmith-LoanFile.zip" title="JohnSmith-LoanFile.zip"></zip-layer-modal>
+
+    <script type="module">
+        import "./src/zip-layer-modal.js";
+        document.getElementById("demo-btn").addEventListener("click", () => {
+            document.querySelector("zip-layer-modal").open();
+        });
+        document.getElementById("docs-btn").addEventListener("click", () => {
+            window.open("https://github.com/Spuds0588/ZipLayer#readme", "_blank", "noopener");
+        });
+    </script>
+
+    <script>
+        // Floating zip-folder animation (zip folders with zippers, mirrors MailLayer Embedded)
+        const container = document.getElementById('floating-container');
+        // Folder silhouette
+        const folderPath = "M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z";
+        // Zipper: two interlocking teeth along the folder front
+        const zipperPath = "M9 8v7m6-7v7";
+        const count = 18;
+        for (let i = 1; i <= count; i++) {
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("viewBox", "0 0 24 24");
+            svg.setAttribute("width", "72");
+            svg.setAttribute("height", "72");
+            svg.classList.add("floating-svg");
+
+            const folder = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            folder.setAttribute("d", folderPath);
+            folder.setAttribute("fill", "var(--pink)");
+            folder.setAttribute("stroke", "none");
+            svg.appendChild(folder);
+
+            // Zipper slider + teeth
+            const teeth = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            teeth.setAttribute("d", zipperPath);
+            teeth.setAttribute("fill", "none");
+            teeth.setAttribute("stroke", "var(--pink-deep)");
+            teeth.setAttribute("stroke-width", "1.4");
+            teeth.setAttribute("stroke-linecap", "round");
+            svg.appendChild(teeth);
+
+            const slider = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            slider.setAttribute("x", "10.3");
+            slider.setAttribute("y", "13.6");
+            slider.setAttribute("width", "3.4");
+            slider.setAttribute("height", "2.4");
+            slider.setAttribute("rx", "0.7");
+            slider.setAttribute("fill", "var(--pink-deep)");
+            svg.appendChild(slider);
+
+            const depth = Math.random() * 10;
+            const scale = 0.5 + (depth * 0.25);
+            const blur = Math.max(0, depth - 7);
+            const duration = 25 + (Math.random() * 30);
+            const delay = Math.random() * -50;
+            svg.style.left = `${Math.random() * 110 - 5}%`;
+            svg.style.setProperty('--drift', `${Math.random() * 500 - 250}px`);
+            svg.style.setProperty('--rotation', `${Math.random() * 720 - 360}deg`);
+            svg.style.filter = `blur(${blur}px)`;
+            svg.style.transform = `scale(${scale}) rotate(${Math.random() * 360}deg)`;
+            svg.style.zIndex = Math.floor(depth);
+            svg.style.opacity = 0.1 + (depth * 0.05);
+            svg.style.animation = `float-up ${duration}s linear infinite`;
+            svg.style.animationDelay = `${delay}s`;
+            container.appendChild(svg);
+        }
+
+        function copyCode() {
+            const code = document.getElementById('install-code').innerText;
+            navigator.clipboard.writeText(code);
+            const btn = document.querySelector('.copy-btn');
+            btn.innerText = 'Copied!';
+            setTimeout(() => (btn.innerText = 'Copy'), 2000);
+        }
+    </script>
+</body>
+</html>

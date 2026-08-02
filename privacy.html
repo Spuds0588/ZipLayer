@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — ZipLayer</title>
+    <style>
+        :root {
+            --pink: #ff4fa3;
+            --pink-deep: #e0287e;
+            --pink-line: rgba(255, 79, 163, 0.35);
+            --ink: #0a0a0f;
+            --ink-2: #12121a;
+            --white: #ffffff;
+            --text-main: #f3f4f6;
+            --text-dim: #9ca3af;
+        }
+        * { box-sizing: border-box; }
+        html { background-color: var(--ink); }
+        body {
+            margin: 0;
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(255, 79, 163, 0.08) 0%, transparent 50%),
+                var(--ink);
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+        .container { max-width: 800px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+        .content-box {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            padding: 3.5rem;
+        }
+        h1, h2, h3 { color: var(--white); }
+        h1 {
+            border-bottom: 2px solid var(--pink);
+            padding-bottom: 1rem;
+            margin-bottom: 2rem;
+            font-size: 2rem;
+        }
+        h2 { font-size: 1.35rem; margin-top: 2.5rem; }
+        p, li { color: var(--text-dim); }
+        a { color: var(--pink); text-decoration: none; }
+        a:hover { color: var(--pink-deep); }
+        .back-link { display: inline-block; margin-bottom: 2rem; font-weight: 600; text-decoration: none; }
+        .no-collect {
+            border: 1px solid var(--pink-line);
+            background: rgba(255, 79, 163, 0.08);
+            border-radius: 12px;
+            padding: 1rem 1.4rem;
+            color: var(--text-main);
+            font-weight: 600;
+            margin: 1.5rem 0;
+        }
+        footer { text-align: center; color: var(--text-dim); font-size: 0.9rem; padding-bottom: 3rem; }
+        @media (max-width: 640px) {
+            .content-box { padding: 1.75rem; }
+            h1 { font-size: 1.6rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to ZipLayer</a>
+        <div class="content-box">
+            <h1>Privacy Policy</h1>
+            <p><strong>Last Updated: August 2026</strong></p>
+
+            <div class="no-collect">📦 We collect nothing at all — and we never will.</div>
+
+            <h2>1. Introduction</h2>
+            <p>
+                ZipLayer ("we", "our", or "us") is a client-side JavaScript library and web component that helps
+                end users download and interact with zip files. This Privacy Policy explains how ZipLayer
+                handles your information.
+            </p>
+
+            <h2>2. Data We Collect</h2>
+            <p>
+                <strong>None.</strong> ZipLayer runs entirely in your browser. We do not operate servers, and we
+                do not collect, store, process, or transmit any of your files, documents, email addresses,
+                personal information, or browsing data. There are no accounts, no trackers, no analytics, and no
+                cookies.
+            </p>
+            <ul>
+                <li>No user accounts or profiles.</li>
+                <li>No cookies, pixels, or fingerprinting.</li>
+                <li>No analytics, telemetry, or logging.</li>
+                <li>No third-party requests from the library itself.</li>
+            </ul>
+
+            <h2>3. What Happens to Your Files</h2>
+            <p>
+                Any zip archive you open with ZipLayer is processed locally on your device using the browser's
+                built-in capabilities. Nothing is uploaded, and nothing ever leaves your machine. When you
+                extract files to a folder or download individual files, that happens entirely within your own
+                browser.
+            </p>
+
+            <h2>4. Third-Party Services</h2>
+            <p>
+                The ZipLayer library itself makes no calls to third-party services. If you choose to use ZipLayer
+                on a website that loads other resources (fonts, scripts, or content from other domains), those
+                requests come from your own site's code, not from ZipLayer.
+            </p>
+
+            <h2>5. Data Sharing and Disclosure</h2>
+            <p>
+                Because we collect no data, we have nothing to share, sell, or disclose. We never will.
+            </p>
+
+            <h2>6. Security</h2>
+            <p>
+                Your data is secured by design: it never leaves your browser. There are no databases to breach
+                and no servers to compromise.
+            </p>
+
+            <h2>7. Changes to This Policy</h2>
+            <p>
+                We may update this Privacy Policy from time to time. Any changes will be reflected by updating
+                the "Last Updated" date at the top of this page.
+            </p>
+
+            <h2>8. Contact Us</h2>
+            <p>
+                If you have any questions about this Privacy Policy, please reach out via our
+                <a href="https://github.com/Spuds0588/ZipLayer" target="_blank" rel="noopener">GitHub repository</a>.
+            </p>
+        </div>
+    </div>
+    <footer>© 2026 ZipLayer. MIT License.</footer>
+</body>
+</html>

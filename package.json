@@ -1,0 +1,55 @@
+{
+  "name": "ziplayer",
+  "version": "0.1.0",
+  "description": "ZipLayer.js — a better zip download experience in 1 line of code. Zero-config, client-side archive SDK + <zip-layer-modal> web component.",
+  "type": "module",
+  "main": "./src/ziplayer.js",
+  "module": "./src/ziplayer.js",
+  "unpkg": "./src/zip-layer-modal.js",
+  "jsdelivr": "./src/zip-layer-modal.js",
+  "exports": {
+    ".": "./src/ziplayer.js",
+    "./modal": "./src/zip-layer-modal.js",
+    "./ziplayer.js": "./src/ziplayer.js",
+    "./zip-layer-modal.js": "./src/zip-layer-modal.js",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "src",
+    "lib"
+  ],
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "build": "node build.mjs",
+    "make-example": "node scripts/make-example.mjs"
+  },
+  "keywords": [
+    "zip",
+    "archive",
+    "unzip",
+    "web-component",
+    "opfs",
+    "file-system-access",
+    "download",
+    "browser",
+    "zip-layer"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Spuds0588/ZipLayer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Spuds0588/ZipLayer/issues"
+  },
+  "homepage": "https://github.com/Spuds0588/ZipLayer#readme",
+  "author": "Spuds0588",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
+  }
+}
