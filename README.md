@@ -89,10 +89,7 @@ if (caps.mustFallback) {
 
 The site and library are fully static and root-relative, so they work from any host — including GitHub Pages and CDNs like jsDelivr — with no build step or configuration.
 
-**GitHub Pages** — a `.nojekyll` file is included, so just point Pages at the repo root:
-
-1. Repo **Settings → Pages** → **Deploy from a branch** → `main` / `/ (root)`. Done.
-2. The demo lives at `https://spuds0588.github.io/ZipLayer/`.
+**GitHub Pages** — the home page is live at **https://spuds0588.github.io/ZipLayer/** (served from the repo root via `.nojekyll`).
 
 **jsDelivr (GitHub)** — the ESM modules are dependency-free and import each other relatively, so they work straight off the CDN:
 
